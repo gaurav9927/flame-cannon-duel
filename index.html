@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Flame Cannon Duel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Chakra+Petch:wght@400;600;700&display=swap">
+<style>
+:root{
+  --night:#0d0b14; --night-2:#171324; --ink:#f4ede2; --muted:#a79cb8;
+  --p1:#ff7a1a; --p1-glow:#ffb35c; --p2:#41c4ff; --p2-glow:#9fe2ff; --panel:#1c1729f2; --line:#3d3554; --bad:#ff6b6b;
+  --font-display:"Black Ops One","Impact","Arial Black",sans-serif;
+  --font-body:"Chakra Petch","Segoe UI",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--night);color:var(--ink);font-family:var(--font-body);font-size:15px;overflow:hidden}
+#wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 16px;gap:8px}
+.bar{width:100%;max-width:calc((100vh - 130px)*16/9)}
+#hud{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.pl{display:flex;flex-direction:column;gap:4px;min-width:0}
+.pl.right{align-items:flex-end;text-align:right}
+.pl .name{font-family:var(--font-display);font-size:18px;letter-spacing:.04em}
+.pl.p1 .name,.pl.p1 .pips{color:var(--p1)} .pl.p2 .name,.pl.p2 .pips{color:var(--p2)}
+.pips{display:flex;gap:5px}
+.pip{width:18px;height:10px;border-radius:2px;background:currentColor;transition:opacity .2s,transform .2s}
+.pip.gone{opacity:.15;transform:scaleY(.6)}
+.tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+#status{font-size:13px;color:var(--muted);text-align:center;flex:1;min-width:0}
+#stage{position:relative;width:100%;max-width:calc((100vh - 130px)*16/9);aspect-ratio:16/9}
+canvas{display:block;width:100%;height:100%;border-radius:6px;background:var(--night-2);outline:1px solid var(--line)}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px}
+.overlay[hidden]{display:none}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:22px 24px;width:min(460px,100%);display:flex;flex-direction:column;gap:12px;max-height:100%;overflow:auto}
+.panel h1{font-family:var(--font-display);font-weight:400;font-size:clamp(26px,5vw,38px);margin:0;line-height:1;background:linear-gradient(90deg,var(--p1),var(--p1-glow) 45%,var(--p2-glow) 55%,var(--p2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.panel h2{font-family:var(--font-display);font-weight:400;font-size:28px;margin:0}
+.panel p{margin:0;color:var(--muted);line-height:1.5}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+button,input{font-family:var(--font-body);font-size:15px}
+button{cursor:pointer;border:1px solid var(--line);background:var(--night-2);color:var(--ink);padding:10px 14px;border-radius:6px;font-weight:600}
+button:hover{border-color:var(--p1)}
+button.primary{background:var(--p1);border-color:var(--p1);color:#1a0c00}
+button.primary:hover{background:var(--p1-glow)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible{outline:2px solid var(--p1-glow);outline-offset:2px}
+input{flex:1;min-width:0;background:var(--night);border:1px solid var(--line);color:var(--ink);padding:10px 12px;border-radius:6px}
+#codeIn{text-transform:uppercase;letter-spacing:.2em}
+.code{font-family:var(--font-display);font-size:36px;letter-spacing:.2em}
+.note{font-size:12px;color:var(--muted)}
+.note.bad{color:var(--bad)}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;color:var(--muted)}
+kbd{font-family:var(--font-body);font-size:12px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 6px;color:var(--ink);background:var(--night)}
+#touch{display:none;justify-content:space-between;gap:10px}
+#touch .grp{display:flex;gap:8px}
+#touch button{width:64px;height:52px;font-size:20px;touch-action:none;user-select:none}
+#touch .fire{width:96px;background:var(--p1);color:#1a0c00;border-color:var(--p1)}
+@media (pointer:coarse){#touch{display:flex}}
+@media (prefers-reduced-motion:reduce){.pip{transition:none}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud" class="bar">
+    <div class="pl p1"><span class="tag" id="t1">Player 1</span><span class="name">Ember</span><div class="pips" id="pips0"></div></div>
+    <div id="status">Choose how to play</div>
+    <div class="pl p2 right"><span class="tag" id="t2">Player 2</span><span class="name">Frost</span><div class="pips" id="pips1"></div></div>
+  </div>
+
+  <div id="stage">
+    <canvas id="cv" width="1600" height="900"></canvas>
+
+    <div class="overlay" id="menu">
+      <div class="panel">
+        <h1>Flame Cannon Duel</h1>
+        <p>Slide your cannon along its rail and launch fireballs across the field. Take 5 hits and you lose.</p>
+        <div class="row"><button class="primary" id="btnCreate">Create online game</button></div>
+        <div class="row">
+          <input id="codeIn" maxlength="4" placeholder="CODE" aria-label="Game code" autocomplete="off">
+          <button id="btnJoin">Join</button>
+        </div>
+        <p class="note" id="onlineNote">Create a game, then send the link to your friend.</p>
+        <div class="row"><button id="btnLocal">Play on one keyboard</button></div>
+        <div class="keys">
+          <span><kbd>↑</kbd> <kbd>↓</kbd> <kbd>Space</kbd></span><span>Move and fire (online)</span>
+          <span><kbd>W</kbd> <kbd>S</kbd> <kbd>F</kbd></span><span>Player 1 on one keyboard</span>
+          <span><kbd>↑</kbd> <kbd>↓</kbd> <kbd>Enter</kbd></span><span>Player 2 on one keyboard</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="lobby" hidden>
+      <div class="panel">
+        <span class="tag">Your game code</span>
+        <div class="code" id="lobbyCode">----</div>
+        <p>Send this link to your opponent. The match starts as soon as they open it.</p>
+        <div class="row">
+          <input id="linkOut" readonly aria-label="Game link">
+          <button class="primary" id="btnCopy">Copy link</button>
+        </div>
+        <p class="note" id="lobbyNote">Waiting for your opponent… You can practice moving meanwhile.</p>
+        <div class="row"><button id="btnLeave">Back to menu</button></div>
+      </div>
+    </div>
+
+    <div class="overlay" id="msg" hidden>
+      <div class="panel">
+        <h2 id="msgTitle">Connecting…</h2>
+        <p id="msgText"></p>
+        <div class="row"><button id="btnMsgMenu">Back to menu</button></div>
+      </div>
+    </div>
+
+    <div class="overlay" id="over" hidden>
+      <div class="panel">
+        <span class="tag">Match over</span>
+        <h2 id="overTitle">Player 1 wins</h2>
+        <p id="overSub"></p>
+        <div class="row"><button class="primary" id="btnRematch">Rematch</button><button id="btnOverMenu">Back to menu</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="touch" class="bar">
+    <div class="grp"><button id="tUp" aria-label="Move up">▲</button><button id="tDown" aria-label="Move down">▼</button></div>
+    <button class="fire" id="tFire">FIRE</button>
+  </div>
+</div>
+
+<!-- PeerJS: browser-to-browser connection (WebRTC). Its free public server only introduces the two players. -->
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(()=>{
+// ================= constants =================
+const W=1600,H=900,MAXHITS=5,XL=120,XR=W-120,YMIN=95,YMAX=H-95;
+const MOVE=640,BALL_V=950,BALL_R=17,HIT_HALF=58,COOLDOWN=380,MAX_INFLIGHT=4;
+const ID_PREFIX='flame-cannon-duel-v1-';
+const SEND_EVERY=1000/30;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),cx=cv.getContext('2d');
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ================= simulation (runs on the host / local) =================
+class Sim{
+  constructor(round=1,present=[true,true]){
+    this.round=round;this.over=-1;this.present=present.slice();
+    this.players=[0,1].map(()=>({y:H/2,hits:0,up:false,down:false,lastFire:0,flash:0}));
+    this.balls=[];this.events=[];this.nextId=1;
+  }
+  fire(side){
+    const p=this.players[side],now=performance.now();
+    if(this.over>=0||!this.present[0]||!this.present[1])return;
+    if(now-p.lastFire<COOLDOWN)return;
+    if(this.balls.filter(b=>b.s===side).length>=MAX_INFLIGHT)return;
+    p.lastFire=now;p.flash=1;
+    const x=side===0?XL+70:XR-70;
+    this.balls.push({id:this.nextId++,s:side,x,y:p.y});
+    this.events.push({k:'fire',s:side,x,y:Math.round(p.y)});
+  }
+  step(dt){
+    for(const p of this.players){
+      if(this.over<0){p.y+=((p.down?1:0)-(p.up?1:0))*MOVE*dt;p.y=Math.max(YMIN,Math.min(YMAX,p.y))}
+      p.flash=Math.max(0,p.flash-dt*4);
+    }
+    for(const b of this.balls){
+      b.x+=(b.s===0?1:-1)*BALL_V*dt;
+      const ts=1-b.s,tgt=this.players[ts],tx=ts===0?XL:XR;
+      const crossing=b.s===0?(b.x>=tx-30&&b.x<=tx+40):(b.x<=tx+30&&b.x>=tx-40);
+      if(crossing&&Math.abs(b.y-tgt.y)<HIT_HALF+BALL_R*.5){
+        b.dead=true;this.events.push({k:'hit',s:b.s,x:tx,y:Math.round(b.y)});
+        if(this.over<0){tgt.hits++;if(tgt.hits>=MAXHITS)this.over=b.s}
+      }else if(b.x<-60||b.x>W+60)b.dead=true;
+    }
+    this.balls=this.balls.filter(b=>!b.dead);
+  }
+  view(){
+    return{round:this.round,over:this.over,
+      p:this.players.map((p,i)=>({y:Math.round(p.y),hits:p.hits,flash:+p.flash.toFixed(2),present:this.present[i]})),
+      b:this.balls.map(b=>[b.id,b.s,Math.round(b.x),Math.round(b.y)])};
+  }
+}
+
+// ================= app state =================
+let role='menu';        // menu | local | host | guest | joining
+let mySide=-1, sim=null, view=null, viewAt=0;
+let peer=null, conn=null, code='';
+let guestEvents=[], lastSendAt=0, lastGuestInput={up:false,down:false};
+let particles=[], shake=0;
+const disp=[H/2,H/2];
+const held={};
+const peerReady=typeof window.Peer==='function';
+
+// ================= HUD =================
+for(const s of [0,1]){const el=$('pips'+s);for(let i=0;i<MAXHITS;i++){const p=document.createElement('span');p.className='pip';el.appendChild(p)}}
+let hudKey='';
+function renderHud(){
+  const v=view||{p:[{hits:0,present:false},{hits:0,present:false}],over:-1,round:1};
+  const key=[role,mySide,v.p[0].hits,v.p[1].hits,v.p[0].present,v.p[1].present,v.over,v.round].join('|');
+  if(key===hudKey)return;hudKey=key;
+  for(const s of [0,1]){const pips=$('pips'+s).children;for(let i=0;i<MAXHITS;i++)pips[i].classList.toggle('gone',i>=MAXHITS-v.p[s].hits)}
+  let t1='Player 1',t2='Player 2',st='';
+  if(role==='local'){t1+=' · W S F';t2+=' · ↑ ↓ Enter';st='One keyboard · first to land 5 hits wins'}
+  else if(role==='host'){t1+=' · You';if(!v.p[1].present)t2+=' · waiting';st=v.p[1].present?`Game ${code} · round ${v.round} · ↑ ↓ move · Space fire`:`Game ${code} · waiting for opponent`}
+  else if(role==='guest'){t2+=' · You';st=`Game ${code} · round ${v.round} · ↑ ↓ move · Space fire`}
+  else if(role==='joining'){st=`Joining game ${code}…`}
+  else st='Choose how to play';
+  if(v.over>=0)st=`Game over · round ${v.round}`;
+  $('t1').textContent=t1;$('t2').textContent=t2;$('status').textContent=st;
+
+  // overlays
+  $('lobby').hidden=!(role==='host'&&!v.p[1].present);
+  if(v.over>=0&&(role==='local'||role==='host'||role==='guest')){
+    const w=v.over,l=1-w;
+    $('overTitle').textContent=`Player ${w+1} wins`;
+    $('overTitle').style.color=w===0?'var(--p1)':'var(--p2)';
+    $('overSub').textContent=role==='local'?`Player ${l+1} took ${MAXHITS} fireballs.`:(w===mySide?`You win! Your opponent took ${MAXHITS} fireballs.`:`You lose. You took ${MAXHITS} fireballs.`);
+    $('over').hidden=false;
+  }else $('over').hidden=true;
+}
+function showMsg(title,text){$('msgTitle').textContent=title;$('msgText').textContent=text;$('msg').hidden=false}
+
+// ================= networking =================
+function randomCode(){const a='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<4;i++)s+=a[Math.floor(Math.random()*a.length)];return s}
+function shareLink(c){return location.href.split('#')[0]+'#'+c}
+function cleanupNet(){
+  try{conn&&conn.close()}catch(e){}
+  try{peer&&peer.destroy()}catch(e){}
+  conn=null;peer=null;
+}
+function toMenu(){
+  cleanupNet();role='menu';mySide=-1;sim=null;view=null;code='';
+  if(location.hash)history.replaceState(null,'',location.href.split('#')[0]);
+  for(const id of ['lobby','msg','over'])$(id).hidden=true;
+  $('menu').hidden=false;hudKey='';renderHud();
+}
+
+function createGame(attempt=0){
+  if(!peerReady)return;
+  cleanupNet();
+  code=randomCode();
+  $('menu').hidden=true;showMsg('Creating game…','Getting a game code from the connection service.');
+  peer=new Peer(ID_PREFIX+code,{debug:0});
+  peer.on('open',()=>{
+    role='host';mySide=0;sim=new Sim(1,[true,false]);view=sim.view();
+    $('msg').hidden=true;
+    $('lobbyCode').textContent=code;$('linkOut').value=shareLink(code);
+    hudKey='';renderHud();
+  });
+  peer.on('connection',c=>{
+    if(conn&&conn.open){c.on('open',()=>{c.send({t:'full'});setTimeout(()=>c.close(),400)});return}
+    conn=c;
+    c.on('open',()=>{
+      sim=new Sim(sim?sim.round+1:1,[true,true]);guestEvents=[];
+      c.send({t:'hello',code});
+    });
+    c.on('data',m=>onHostData(c,m));
+    c.on('close',()=>guestLeft(c));
+    c.on('error',()=>guestLeft(c));
+  });
+  peer.on('disconnected',()=>{try{peer&&!peer.destroyed&&peer.reconnect()}catch(e){}});
+  peer.on('error',e=>{
+    if(e.type==='unavailable-id'&&attempt<4){createGame(attempt+1);return}
+    if(role==='host'&&conn&&conn.open)return; // game still running directly
+    showMsg('Could not create a game',netErrorText(e));
+  });
+}
+function guestLeft(c){
+  if(c!==conn)return;
+  conn=null;
+  if(role!=='host')return;
+  sim=new Sim(sim.round+1,[true,false]);view=sim.view();hudKey='';renderHud();
+  $('lobbyNote').textContent='Your opponent left. Send the link again to play another match.';
+}
+function onHostData(c,m){
+  if(c!==conn||!m||typeof m!=='object'||!sim)return;
+  const g=sim.players[1];
+  if(m.t==='in'){g.up=!!m.up;g.down=!!m.down}
+  else if(m.t==='fire')sim.fire(1);
+  else if(m.t==='rematch'&&sim.over>=0){sim=new Sim(sim.round+1,[true,true])}
+}
+
+function joinGame(c){
+  if(!peerReady)return;
+  c=String(c||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(c.length!==4){$('onlineNote').textContent='Enter the 4-character code from your friend’s link.';$('onlineNote').className='note bad';return}
+  cleanupNet();
+  code=c;role='joining';mySide=1;view=null;hudKey='';renderHud();
+  $('menu').hidden=true;showMsg('Joining game '+code+'…','Connecting directly to your friend’s browser.');
+  history.replaceState(null,'',shareLink(code));
+  peer=new Peer({debug:0});
+  let opened=false;
+  peer.on('open',()=>{
+    const c2=peer.connect(ID_PREFIX+code,{reliable:true,serialization:'json'});
+    conn=c2;
+    c2.on('open',()=>{opened=true});
+    c2.on('data',m=>onGuestData(c2,m));
+    c2.on('close',()=>hostLeft(c2));
+    c2.on('error',()=>hostLeft(c2));
+    setTimeout(()=>{if(!opened&&conn===c2&&role==='joining')showMsg('Could not connect','The game didn’t answer. Check the link is current and the other player still has the game open, then try again.')},15000);
+  });
+  peer.on('disconnected',()=>{try{peer&&!peer.destroyed&&peer.reconnect()}catch(e){}});
+  peer.on('error',e=>{
+    if(role==='guest'&&conn&&conn.open)return;
+    if(e.type==='peer-unavailable')showMsg('Game not found',`No game with code ${code} is open right now. Ask your friend to click Create online game and send you the new link.`);
+    else showMsg('Could not connect',netErrorText(e));
+  });
+}
+function onGuestData(c,m){
+  if(c!==conn||!m||typeof m!=='object')return;
+  if(m.t==='hello'){role='guest';$('msg').hidden=true;hudKey='';sendGuestInput(true)}
+  else if(m.t==='full'){showMsg('Game is full','Two players are already in this game.')}
+  else if(m.t==='s'){
+    if(role==='joining'){role='guest';$('msg').hidden=true}
+    if(!view)disp[0]=m.p[0].y,disp[1]=m.p[1].y;
+    view=m;viewAt=performance.now();
+    applyEvents(m.ev||[]);
+  }
+}
+function hostLeft(c){
+  if(c!==conn)return;
+  conn=null;
+  if(role==='guest'||role==='joining'){role='menu-left';showMsg('Opponent left','The other player closed the game. Ask them to create a new one and send you the link.')}
+}
+function netErrorText(e){
+  const t=e&&e.type;
+  if(t==='network'||t==='server-error'||t==='socket-error'||t==='socket-closed')return'Could not reach the connection service. Check your internet connection and try again.';
+  if(t==='browser-incompatible')return'This browser can’t make direct connections. Try a recent Chrome, Edge, Firefox or Safari.';
+  return'Something went wrong while connecting ('+(t||'unknown')+'). Try again.';
+}
+function sendGuestInput(force){
+  if(role!=='guest'||!conn||!conn.open)return;
+  const up=!!(held.ArrowUp||held.w||held.tUp),down=!!(held.ArrowDown||held.s||held.tDown);
+  if(force||up!==lastGuestInput.up||down!==lastGuestInput.down){lastGuestInput={up,down};conn.send({t:'in',up,down})}
+}
+
+// ================= input =================
+function doFire(sideForLocal){
+  if(role==='local')sim.fire(sideForLocal);
+  else if(role==='host')sim.fire(0);
+  else if(role==='guest'&&conn&&conn.open)conn.send({t:'fire'});
+}
+function doRematch(){
+  if(role==='local'||role==='host'){if(sim&&sim.over>=0)sim=new Sim(sim.round+1,sim.present)}
+  else if(role==='guest'&&conn&&conn.open)conn.send({t:'rematch'});
+}
+const GAME_KEYS=['ArrowUp','ArrowDown',' ','Enter','w','s','f'];
+addEventListener('keydown',e=>{
+  if(document.activeElement&&document.activeElement.tagName==='INPUT')return;
+  const k=e.key.length===1?e.key.toLowerCase():e.key;
+  if(role!=='menu'&&GAME_KEYS.includes(k))e.preventDefault();
+  held[k]=true;
+  if(!e.repeat){
+    if(role==='local'){if(k==='f')doFire(0);if(k==='Enter'){if(sim&&sim.over>=0)doRematch();else doFire(1)}}
+    else{if(k===' ')doFire();if(k==='Enter'&&view&&view.over>=0)doRematch()}
+  }
+  sendGuestInput();
+});
+addEventListener('keyup',e=>{const k=e.key.length===1?e.key.toLowerCase():e.key;held[k]=false;sendGuestInput()});
+addEventListener('blur',()=>{for(const k in held)held[k]=false;sendGuestInput()});
+function bindHold(id,key){
+  const b=$(id);
+  b.addEventListener('pointerdown',e=>{e.preventDefault();held[key]=true;sendGuestInput()});
+  for(const ev of ['pointerup','pointercancel','pointerleave'])b.addEventListener(ev,()=>{held[key]=false;sendGuestInput()});
+}
+bindHold('tUp','tUp');bindHold('tDown','tDown');
+$('tFire').addEventListener('pointerdown',e=>{e.preventDefault();doFire(1)});
+
+$('btnCreate').onclick=()=>createGame();
+$('btnJoin').onclick=()=>joinGame($('codeIn').value);
+$('codeIn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();joinGame($('codeIn').value)}});
+$('btnLocal').onclick=()=>{cleanupNet();role='local';mySide=-1;sim=new Sim(1,[true,true]);$('menu').hidden=true;hudKey=''};
+$('btnLeave').onclick=toMenu;$('btnMsgMenu').onclick=toMenu;$('btnOverMenu').onclick=toMenu;
+$('btnRematch').onclick=doRematch;
+$('btnCopy').onclick=()=>{
+  const v=$('linkOut').value,btn=$('btnCopy');
+  const done=()=>{btn.textContent='Copied';setTimeout(()=>btn.textContent='Copy link',1500)};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(v).then(done,()=>{$('linkOut').select();btn.textContent='Press Ctrl+C'});
+  else{$('linkOut').select();btn.textContent='Press Ctrl+C'}
+};
+
+if(!peerReady){
+  $('btnCreate').disabled=$('btnJoin').disabled=true;
+  $('onlineNote').textContent='Online play couldn’t load (no internet?). You can still play on one keyboard.';
+  $('onlineNote').className='note bad';
+}
+
+// ================= effects =================
+function burst(x,y,dir,n,side,big){
+  const hot=side===0?['#fff3c4','#ffb35c','#ff7a1a','#c2410c']:['#ffffff','#9fe2ff','#41c4ff','#1d6fa5'];
+  for(let i=0;i<n;i++){
+    const a=dir===0?Math.random()*Math.PI*2:(dir>0?0:Math.PI)+(Math.random()-.5)*1.4;
+    const s=(big?260:120)+Math.random()*(big?420:220);
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,decay:1.2+Math.random()*1.4,r:2+Math.random()*(big?7:4),c:hot[i%hot.length]});
+  }
+}
+function applyEvents(evs){
+  for(const ev of evs){
+    if(ev.k==='fire')burst(ev.x,ev.y,ev.s===0?1:-1,12,ev.s,false);
+    else if(ev.k==='hit'){burst(ev.x,ev.y,0,46,ev.s,true);if(!reduce)shake=1}
+  }
+}
+
+// ================= main loop =================
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  if(sim&&(role==='local'||role==='host')){
+    const p0=sim.players[0],p1=sim.players[1];
+    if(role==='local'){p0.up=!!held.w;p0.down=!!held.s;p1.up=!!(held.ArrowUp||held.tUp);p1.down=!!(held.ArrowDown||held.tDown)}
+    else{p0.up=!!(held.ArrowUp||held.w||held.tUp);p0.down=!!(held.ArrowDown||held.s||held.tDown)}
+    sim.step(dt);
+    const evs=sim.events;sim.events=[];
+    applyEvents(evs);
+    view=sim.view();viewAt=now;
+    disp[0]=view.p[0].y;disp[1]=view.p[1].y;
+    if(role==='host'){
+      guestEvents.push(...evs);
+      if(conn&&conn.open&&now-lastSendAt>=SEND_EVERY){
+        lastSendAt=now;
+        const m=view;m.t='s';m.ev=guestEvents;guestEvents=[];
+        try{conn.send(m)}catch(e){}
+      }else if(!conn)guestEvents=[];
+    }
+  }else if(view){
+    for(const s of [0,1])disp[s]+=(view.p[s].y-disp[s])*Math.min(1,dt*22);
+  }
+  const ahead=role==='guest'?Math.min(.06,(now-viewAt)/1000):0;
+  const balls=view?view.b.map(([id,s,x,y])=>({id,s,y,x:x+(s===0?1:-1)*BALL_V*ahead})):[];
+  if(!reduce)for(const b of balls)particles.push({x:b.x,y:b.y+(Math.random()-.5)*10,vx:(b.s===0?-1:1)*(40+Math.random()*80),vy:(Math.random()-.5)*50,life:1,decay:2.6+Math.random()*1.5,r:3+Math.random()*6,c:b.s===0?(Math.random()<.5?'#ffb35c':'#ff5a0a'):(Math.random()<.5?'#9fe2ff':'#2f9bdc')});
+  for(const q of particles){q.x+=q.vx*dt;q.y+=q.vy*dt;q.vx*=.96;q.vy=q.vy*.96+30*dt;q.life-=q.decay*dt}
+  particles=particles.filter(q=>q.life>0);if(particles.length>900)particles.splice(0,particles.length-900);
+  shake=Math.max(0,shake-dt*3);
+  renderHud();
+  draw(now,balls);
+  requestAnimationFrame(frame);
+}
+
+// ================= drawing =================
+const stars=Array.from({length:120},()=>({x:Math.random()*W,y:Math.random()*H*.9,r:Math.random()*1.6+.3,a:Math.random()*.6+.2}));
+function draw(now,balls){
+  cx.save();
+  if(shake>0)cx.translate((Math.random()-.5)*14*shake,(Math.random()-.5)*14*shake);
+  const g=cx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0d0b14');g.addColorStop(1,'#1d1530');
+  cx.fillStyle=g;cx.fillRect(-20,-20,W+40,H+40);
+  for(const s of stars){cx.globalAlpha=s.a*(.7+.3*Math.sin(now/900+s.x));cx.fillStyle='#e9e2ff';cx.beginPath();cx.arc(s.x,s.y,s.r,0,7);cx.fill()}
+  cx.globalAlpha=1;
+  cx.strokeStyle='#3a3350';cx.setLineDash([10,16]);cx.lineWidth=2;cx.beginPath();cx.moveTo(W/2,30);cx.lineTo(W/2,H-30);cx.stroke();cx.setLineDash([]);
+  for(const [x,col] of [[XL-38,'#ff7a1a'],[XR+38,'#41c4ff']]){
+    cx.fillStyle='#2a2440';cx.fillRect(x-5,YMIN-60,10,YMAX-YMIN+120);
+    cx.fillStyle=col;cx.globalAlpha=.35;for(let y=YMIN-50;y<=YMAX+50;y+=45)cx.fillRect(x-12,y,24,2);cx.globalAlpha=1;
+  }
+  for(const s of [0,1])drawCannon(s);
+  cx.globalCompositeOperation='lighter';
+  for(const b of balls){
+    const hot=b.s===0,rg=cx.createRadialGradient(b.x,b.y,0,b.x,b.y,BALL_R*2.4);
+    rg.addColorStop(0,'#ffffff');rg.addColorStop(.25,hot?'#ffe08a':'#d8f4ff');rg.addColorStop(.55,hot?'#ff7a1a':'#41c4ff');rg.addColorStop(1,'rgba(0,0,0,0)');
+    cx.fillStyle=rg;cx.beginPath();cx.arc(b.x,b.y,BALL_R*2.4*(1+.08*Math.sin(now/40+b.id)),0,7);cx.fill();
+  }
+  for(const q of particles){cx.globalAlpha=Math.max(0,q.life);cx.fillStyle=q.c;cx.beginPath();cx.arc(q.x,q.y,q.r*q.life+.5,0,7);cx.fill()}
+  cx.globalCompositeOperation='source-over';cx.globalAlpha=1;
+  cx.restore();
+}
+function rr(x,y,w,h,r){cx.beginPath();cx.moveTo(x+r,y);cx.arcTo(x+w,y,x+w,y+h,r);cx.arcTo(x+w,y+h,x,y+h,r);cx.arcTo(x,y+h,x,y,r);cx.arcTo(x,y,x+w,y,r);cx.closePath()}
+function drawCannon(side){
+  const p=view?view.p[side]:{hits:0,flash:0,present:true};
+  const left=side===0,x=left?XL:XR,y=disp[side],dir=left?1:-1;
+  const col=left?'#ff7a1a':'#41c4ff',glow=left?'#ffb35c':'#9fe2ff';
+  cx.save();cx.globalAlpha=p.present?1:.25;
+  cx.shadowColor=col;cx.shadowBlur=p.flash*40;
+  cx.fillStyle='#2b2540';rr(x-38*dir-16,y-48,32,96,6);cx.fill();
+  cx.fillStyle=col;rr(left?x-10:x-62,y-17,72,34,8);cx.fill();
+  cx.fillStyle=glow;rr(left?x+52:x-70,y-22,18,44,5);cx.fill();
+  cx.shadowBlur=0;
+  const c0=x-14*dir;
+  cx.fillStyle='#3d3554';cx.beginPath();cx.arc(c0,y,34,0,7);cx.fill();
+  cx.fillStyle=col;cx.beginPath();cx.arc(c0,y,22,0,7);cx.fill();
+  cx.fillStyle='#0d0b14';cx.beginPath();cx.arc(c0,y,9,0,7);cx.fill();
+  cx.strokeStyle='#0d0b14';cx.lineWidth=3;
+  for(let i=0;i<p.hits;i++){const a=i*1.3+.4;cx.beginPath();cx.moveTo(c0+Math.cos(a)*10,y+Math.sin(a)*10);cx.lineTo(c0+Math.cos(a)*30,y+Math.sin(a)*30);cx.stroke()}
+  if(p.flash>0){cx.globalCompositeOperation='lighter';const mx=x+70*dir,rg=cx.createRadialGradient(mx,y,0,mx,y,60*p.flash);rg.addColorStop(0,'#fff8e0');rg.addColorStop(.4,glow);rg.addColorStop(1,'rgba(0,0,0,0)');cx.fillStyle=rg;cx.beginPath();cx.arc(mx,y,60*p.flash,0,7);cx.fill();cx.globalCompositeOperation='source-over'}
+  if((role==='host'||role==='guest')&&side===mySide){cx.fillStyle='#f4ede2';cx.font='600 22px "Chakra Petch",sans-serif';cx.textAlign='center';cx.fillText('YOU',c0,y-58)}
+  cx.restore();
+}
+
+// ================= start =================
+renderHud();
+requestAnimationFrame(frame);
+const m=location.hash.match(/^#([A-Za-z0-9]{4})$/);
+if(m&&peerReady)joinGame(m[1]);
+addEventListener('hashchange',()=>{const h=location.hash.match(/^#([A-Za-z0-9]{4})$/);if(h&&peerReady&&h[1].toUpperCase()!==code)joinGame(h[1])});
+})();
+</script>
+</body>
+</html>
